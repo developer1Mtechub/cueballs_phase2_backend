@@ -9,12 +9,14 @@ exports.createqr_bonus_flyer = async (req, res) => {
        VALUES ($1, $2, $3, $4, $5) RETURNING *`,
       [bonus_name, start_date, end_date, bonus_coins, qr_image]
     );
-    res
-      .status(200)
-      .json({ message: "Message sent successfully", data: userData.rows[0] });
+    res.status(200).json({
+      error: false,
+      message: "Message sent successfully",
+      data: userData.rows[0],
+    });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: "Internal server error" });
+    res.status(500).json({ error: true, message: "Internal server error" });
   } finally {
     client.release();
   }
@@ -25,10 +27,12 @@ exports.getAllqr_bonus_flyer = async (req, res) => {
   try {
     const query = "SELECT * FROM qr_bonus_flyer ORDER BY created_at DESC";
     const result = await pool.query(query);
-    res.status(200).json({ message: "All qr_bonus_flyer", data: result.rows });
+    res
+      .status(200)
+      .json({ error: false, message: "All qr_bonus_flyer", data: result.rows });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: "Internal server error" });
+    res.status(500).json({ error: true, message: "Internal server error" });
   } finally {
     client.release();
   }
@@ -50,10 +54,11 @@ exports.getAllqr_bonus_flyerPagination = async (req, res) => {
       message: "All qr_bonus_flyer",
       total_qr_bonus_flyer: result1.rows[0].count,
       data: result.rows,
+      error: false,
     });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: "Internal server error" });
+    res.status(500).json({ error: true, message: "Internal server error" });
   } finally {
     client.release();
   }
@@ -65,12 +70,14 @@ exports.getSingleqr_bonus_flyer = async (req, res) => {
   try {
     const query = "SELECT * FROM qr_bonus_flyer WHERE qr_bonus_flyer_id=$1";
     const result = await pool.query(query, [qr_bonus_flyer_id]);
-    res
-      .status(200)
-      .json({ message: "Single qr_bonus_flyer", data: result.rows[0] });
+    res.status(200).json({
+      error: false,
+      message: "Single qr_bonus_flyer",
+      data: result.rows[0],
+    });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: "Internal server error" });
+    res.status(500).json({ error: true, message: "Internal server error" });
   } finally {
     client.release();
   }
@@ -93,7 +100,9 @@ exports.updateqr_bonus_flyer = async (req, res) => {
   if (qr_image) fields.push(`qr_image = $${index++}`), values.push(qr_image);
 
   if (fields.length === 0) {
-    return res.status(400).json({ message: "No fields provided to update" });
+    return res
+      .status(400)
+      .json({ error: true, message: "No fields provided to update" });
   }
 
   const query = `
@@ -105,11 +114,11 @@ exports.updateqr_bonus_flyer = async (req, res) => {
   try {
     const result = await pool.query(query, values);
     if (result.rows.length === 0) {
-      return res.status(404).json({ message: "Record not found" });
+      return res.status(404).json({ error: true, message: "Record not found" });
     }
-    res.json(result.rows[0]);
+    res.json({ error: false, data: result.rows[0] });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ errorMessage: error.message, error: true });
   }
 };
 // also create delete

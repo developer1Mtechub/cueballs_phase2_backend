@@ -1190,19 +1190,51 @@ io.on("connection", (socket) => {
   console.log("New client connected:", socket.id);
 
   // Track online users
+  // socket.on("user-connected", async ({ userId }) => {
+  //   if (!userId) {
+  //     console.error("No userId provided for user-connected event.");
+  //     return;
+  //   }
+
+  //   try {
+  //     // Store the mapping of socket.id to userId
+  //     await redisClient.set(`user:${userId}:socket`, socket.id);
+  //     await redisClient.set(`socket:${socket.id}`, userId);
+
+  //     // Add the userId to the online-users set
+  //     await redisClient.sAdd("online-users", userId);
+
+  //     console.log(
+  //       `User ${userId} connected and mapped to socket ${socket.id}.`
+  //     );
+  //     emitActiveGames();
+  //   } catch (err) {
+  //     console.error(`Error tracking online user ${userId}:`, err);
+  //   }
+  // });
   socket.on("user-connected", async ({ userId }) => {
+    console.log("userId", userId);
     if (!userId) {
       console.error("No userId provided for user-connected event.");
       return;
     }
 
     try {
+      // Remove old socket.id mapping if exists
+      const previousSocketId = await redisClient.get(`user:${userId}:socket`);
+      if (previousSocketId) {
+        await redisClient.del(`socket:${previousSocketId}`);
+      }
+
       // Store the mapping of socket.id to userId
       await redisClient.set(`user:${userId}:socket`, socket.id);
       await redisClient.set(`socket:${socket.id}`, userId);
 
-      // Add the userId to the online-users set
-      await redisClient.sAdd("online-users", userId);
+      // Add the userId to the online-users set if not already present
+      const isOnline = await redisClient.sIsMember("online-users", userId);
+      if (!isOnline) {
+        await redisClient.sAdd("online-users", userId);
+      }
 
       console.log(
         `User ${userId} connected and mapped to socket ${socket.id}.`
@@ -1212,7 +1244,6 @@ io.on("connection", (socket) => {
       console.error(`Error tracking online user ${userId}:`, err);
     }
   });
-
   // Handle admin creating a game
   socket.on("game-created", async (gameData) => {
     const { gameId, status } = gameData;
@@ -1317,8 +1348,10 @@ io.on("connection", (socket) => {
 
       // Emit to participants of the game
       const participants = await redisClient.sMembers(`room:${gameId}`);
+      console.log(participants);
       for (const userId of participants) {
         const socketId = await redisClient.get(`user:${userId}:socket`);
+        console.log(socketId);
         if (socketId) {
           io.to(socketId).emit("game-status-updated", { gameId, status });
         }
@@ -1366,6 +1399,28 @@ io.on("connection", (socket) => {
   }
 
   // Handle user disconnect
+  // socket.on("disconnect", async () => {
+  //   console.log(`Client disconnected: ${socket.id}`);
+
+  //   try {
+  //     // Retrieve userId associated with this socket.id
+  //     const userId = await redisClient.get(`socket:${socket.id}`);
+
+  //     if (userId) {
+  //       // Remove userId from the online-users set
+  //       await redisClient.sRem("online-users", userId);
+  //       console.log(`User ${userId} removed from online users.`);
+  //     }
+
+  //     // Remove the mapping for this socket.id
+  //     await redisClient.del(`socket:${socket.id}`);
+  //   } catch (err) {
+  //     console.error(
+  //       `Error during disconnect cleanup for socket ${socket.id}:`,
+  //       err
+  //     );
+  //   }
+  // });
   socket.on("disconnect", async () => {
     console.log(`Client disconnected: ${socket.id}`);
 
@@ -1374,13 +1429,18 @@ io.on("connection", (socket) => {
       const userId = await redisClient.get(`socket:${socket.id}`);
 
       if (userId) {
-        // Remove userId from the online-users set
-        await redisClient.sRem("online-users", userId);
-        console.log(`User ${userId} removed from online users.`);
-      }
+        // Remove the mapping for this socket.id
+        await redisClient.del(`socket:${socket.id}`);
 
-      // Remove the mapping for this socket.id
-      await redisClient.del(`socket:${socket.id}`);
+        // Check if the user has any active socket connections
+        const currentSocketId = await redisClient.get(`user:${userId}:socket`);
+        if (currentSocketId === socket.id) {
+          // Remove userId from the online-users set if this was their last connection
+          await redisClient.sRem("online-users", userId);
+          await redisClient.del(`user:${userId}:socket`);
+          console.log(`User ${userId} removed from online users.`);
+        }
+      }
     } catch (err) {
       console.error(
         `Error during disconnect cleanup for socket ${socket.id}:`,
