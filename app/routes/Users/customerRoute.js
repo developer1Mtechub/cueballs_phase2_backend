@@ -4,6 +4,12 @@ const controller = require("../../controllers/USERS/customerController");
 
 // user
 router.post("/create_account", controller.registerCustomer);
+router.post("/create_subadmin", controller.registerCustomer1);
+router.get("/get_subadmin", controller.get_subadmin);
+router.put("/update_subadmin", controller.update_subadmin);
+router.put("/update_subadmin_password", controller.update_subadmin_password);
+// delete subadmin
+router.post("/delete_subadmin", controller.delete_subadmin);
 router.put("/sign_in", controller.signinCustomer);
 router.post("/forget_password_email", controller.verifyEmail);
 router.put("/verification_otp", controller.verificationOtp);
@@ -35,4 +41,10 @@ router.get(
   "/get_top_5_recent_registered_users",
   controller.getTop5RecentRegisteredUsers
 );
+router.get(
+  "/getUserTransactionsWithDateRange",
+  controller.getUserTransactionsWithDateRange
+);
+
+router.get("/getGamesByDateRange", controller.getGamesByDateRange);
 module.exports = router;

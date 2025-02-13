@@ -1,4 +1,5 @@
 const { pool } = require("../../config/db.config");
+const fetchBallImages = require("../../utils/ball_images_urls");
 
 // Participate in game after paying entry fee // Also update the winning ball
 exports.createGameUser = async (req, res, next) => {
@@ -306,7 +307,281 @@ exports.createGameUserV2 = async (req, res, next) => {
 exports.getGameUserByGameId = async (req, res, next) => {
   const client = await pool.connect();
   try {
-    const { game_id } = req.query;
+    const { game_id, user_id } = req.query;
+
+    if (!game_id) {
+      return res.json({ error: true, message: "Please Provide Game ID" });
+    }
+
+    // Fetch game details
+    const gameData = await pool.query(
+      "SELECT * FROM games WHERE game_id = $1",
+      [game_id]
+    );
+
+    if (gameData.rows.length === 0) {
+      return res.json({ error: true, message: "Game Not Found" });
+    }
+
+    const gameDetails = gameData.rows[0];
+    const {
+      entry_fee,
+      commission,
+      game_status,
+      initial_deposit,
+      winner_details,
+    } = gameDetails;
+    const initialDeposit = initial_deposit || 0;
+
+    // Fetch total participants
+    const totalParticipantsQuery = await pool.query(
+      "SELECT COUNT(DISTINCT user_id) AS total_participants FROM game_users WHERE game_id = $1",
+      [game_id]
+    );
+    const totalParticipants =
+      totalParticipantsQuery.rows[0]?.total_participants || 0;
+
+    // Calculate jackpot
+    let jackpot =
+      parseFloat(entry_fee) * parseFloat(totalParticipants) +
+      parseFloat(initialDeposit);
+    if (game_status !== "scheduled") {
+      const commissionAmount = jackpot * (commission / 100);
+      jackpot -= commissionAmount;
+    }
+
+    // Fetch ball counts
+    const ballCountsQuery = await pool.query(
+      "SELECT winning_ball, COUNT(*) AS count FROM game_users WHERE game_id = $1 GROUP BY winning_ball",
+      [game_id]
+    );
+
+    // Populate ball counts with images and counts
+    const ballImageUrls = await fetchBallImages(); // Fetch ball images
+    let ballCounts = {};
+    for (let i = 1; i <= 15; i++) {
+      ballCounts[i] = {
+        count: 0,
+        imageUrl: ballImageUrls[i],
+      };
+    }
+    for (let row of ballCountsQuery.rows) {
+      ballCounts[row.winning_ball] = {
+        count: parseInt(row.count),
+        imageUrl: ballImageUrls[row.winning_ball],
+      };
+    }
+
+    // Fetch all participants of the game
+    const participantsQuery = await pool.query(
+      `
+      SELECT 
+        gu.user_id, 
+        u.user_name, 
+        u.email, 
+        gu.winning_ball, 
+        gu.round_no, 
+        gu.game_users_id
+      FROM 
+        game_users gu
+      JOIN 
+        users u ON gu.user_id = u.user_id::TEXT
+      WHERE 
+        gu.game_id = $1
+      `,
+      [game_id]
+    );
+
+    let participants = participantsQuery.rows.map((row) => ({
+      user_id: row.user_id,
+      user_name: row.user_name,
+      email: row.email,
+      selected_ball: row.winning_ball,
+      game_user_id: row.game_users_id,
+      ball_image: ballImageUrls[row.winning_ball],
+      round: row.round_no,
+    }));
+
+    // Check if the requesting user participated in this game
+    let userParticipated = false;
+    let userSelectedBallDetails = [];
+
+    if (user_id) {
+      userSelectedBallDetails = participants.filter(
+        (p) => p.user_id === user_id
+      );
+      userParticipated = userSelectedBallDetails.length > 0;
+    }
+
+    // Build response
+    const gameResponse = {
+      game_id,
+      entry_fee,
+      winner_details,
+      commission,
+      game_status,
+      total_participants: totalParticipants,
+      ball_counts_participants: ballCounts,
+      user_participated: userParticipated,
+      user_selected_ball_details: userSelectedBallDetails,
+      restartedStatus: gameDetails.restarted || null,
+      restartedRound: gameDetails.restarted_round || "0",
+      jackpot:
+        Number(jackpot) % 1 === 0
+          ? Number(jackpot)
+          : Number(jackpot).toFixed(2),
+      participants, // All participants added here
+    };
+
+    res.json({
+      error: false,
+      data: gameResponse,
+      message: "Game details fetched successfully",
+    });
+  } catch (err) {
+    console.error("Error fetching game details:", err);
+    res.json({ error: true, data: [], message: "An error occurred" });
+  } finally {
+    client.release();
+  }
+};
+
+// exports.getGameUserByGameId = async (req, res, next) => {
+//   const client = await pool.connect();
+//   try {
+//     const { game_id, user_id } = req.query;
+
+//     if (!game_id) {
+//       return res.json({ error: true, message: "Please Provide Game ID" });
+//     }
+
+//     const gameData = await pool.query(
+//       "SELECT * FROM games WHERE game_id = $1",
+//       [game_id]
+//     );
+//     if (gameData.rows.length === 0) {
+//       return res.json({ error: true, message: "Game Not Found" });
+//     }
+
+//     const gameDetails = gameData.rows[0];
+//     const { entry_fee, commission, game_status, winner_ball, initial_deposit } =
+//       gameDetails;
+
+//     // Set default value for initial deposit
+//     const initialDeposit = initial_deposit || 0;
+
+//     // Fetch total participants
+//     const totalParticipantsQuery = await pool.query(
+//       "SELECT COUNT(DISTINCT user_id) AS total_participants FROM game_users WHERE game_id = $1",
+//       [game_id]
+//     );
+//     const totalParticipants =
+//       totalParticipantsQuery.rows[0]?.total_participants || 0;
+
+//     // Calculate jackpot
+//     let jackpot =
+//       parseFloat(entry_fee) * parseFloat(totalParticipants) +
+//       parseFloat(initialDeposit);
+//     if (game_status !== "scheduled") {
+//       const commissionAmount = jackpot * (commission / 100);
+//       jackpot -= commissionAmount;
+//     }
+
+//     // Fetch ball counts
+//     const ballCountsQuery = await pool.query(
+//       "SELECT winning_ball, COUNT(*) AS count FROM game_users WHERE game_id = $1 GROUP BY winning_ball",
+//       [game_id]
+//     );
+
+//     // Populate ball counts with images and counts
+//     const ballImageUrls = await fetchBallImages(); // Assuming the same function from `getScheduledGamesv2`
+//     let ballCounts = {};
+//     for (let i = 1; i <= 15; i++) {
+//       ballCounts[i] = {
+//         count: 0,
+//         imageUrl: ballImageUrls[i],
+//       };
+//     }
+//     for (let row of ballCountsQuery.rows) {
+//       ballCounts[row.winning_ball] = {
+//         count: parseInt(row.count),
+//         imageUrl: ballImageUrls[row.winning_ball],
+//       };
+//     }
+
+//     // Check if the user participated in this game
+//     let userParticipated = false;
+//     let userSelectedBallDetails = [];
+//     if (user_id) {
+//       const userParticipationQuery = await pool.query(
+//         `
+//           SELECT
+//             gu.winning_ball,
+//             gu.game_users_id,
+//             gu.round_no,
+//             u.user_name,
+//             u.email
+//           FROM
+//             game_users gu
+//           JOIN
+//             users u
+//           ON
+//             gu.user_id = u.user_id::TEXT
+//           WHERE
+//             gu.game_id = $1
+//             AND gu.user_id = $2
+//         `,
+//         [game_id, user_id]
+//       );
+
+//       if (userParticipationQuery.rows.length > 0) {
+//         userParticipated = true;
+//         userSelectedBallDetails = userParticipationQuery.rows.map((row) => ({
+//           selected_ball: row.winning_ball,
+//           game_user_id: row.game_users_id,
+//           ball_image: ballImageUrls[row.winning_ball],
+//           round: row.round_no,
+//           user_name: row.user_name,
+//           email: row.email,
+//         }));
+//       }
+//     }
+
+//     // Build response
+//     const gameResponse = {
+//       game_id: game_id,
+//       entry_fee: entry_fee,
+//       commission: commission,
+//       game_status: game_status,
+//       total_participants: totalParticipants,
+//       ball_counts_participants: ballCounts,
+//       user_participated: userParticipated,
+//       user_selected_ball_details: userSelectedBallDetails,
+//       restartedStatus: gameDetails.restarted || null,
+//       restartedRound: gameDetails.restarted_round || "0",
+//       jackpot:
+//         Number(jackpot) % 1 === 0
+//           ? Number(jackpot)
+//           : Number(jackpot).toFixed(2),
+//     };
+
+//     res.json({
+//       error: false,
+//       data: gameResponse,
+//       message: "Game details fetched successfully",
+//     });
+//   } catch (err) {
+//     console.error("Error fetching game details:", err);
+//     res.json({ error: true, data: [], message: "An error occurred" });
+//   } finally {
+//     client.release();
+//   }
+// };
+
+exports.getGameUserByGameId1 = async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const { game_id, user_id } = req.query;
     if (!game_id) {
       res.json({ error: true, message: "Please Provide Game ID" });
       return;
@@ -321,8 +596,11 @@ exports.getGameUserByGameId = async (req, res, next) => {
     }
 
     let game_details = gameUser.rows[0];
-    const { entry_fee, game_status, commission, winner_ball } = game_details;
-
+    let { entry_fee, game_status, commission, winner_ball, initial_deposit } =
+      game_details;
+    if (initial_deposit == null) {
+      initial_deposit = 0;
+    }
     //   game_details.entry_fee = parseFloat(game_details.entry_fee).toFixed(4);
     //   game_details.commission = parseFloat(game_details.commission).toFixed(4);
     game_details.winning_amount = parseFloat(
@@ -340,6 +618,7 @@ exports.getGameUserByGameId = async (req, res, next) => {
       "SELECT * FROM game_users WHERE game_id=$1",
       [game_id]
     );
+
     const gameUsers1 = await pool.query(
       "SELECT DISTINCT user_id FROM game_users WHERE game_id=$1",
       [game_id]
@@ -373,7 +652,9 @@ exports.getGameUserByGameId = async (req, res, next) => {
       }
     }
 
-    let jackpot = parseFloat(entry_fee) * parseFloat(participated_users);
+    let jackpot =
+      parseFloat(entry_fee) * parseFloat(participated_users) +
+      parseFloat(initial_deposit);
     if (game_status !== "scheduled") {
       const commission_amount = jackpot * (parseFloat(commission) / 100);
       jackpot -= commission_amount;
@@ -384,13 +665,15 @@ exports.getGameUserByGameId = async (req, res, next) => {
       let winnerCondition;
       if (winner_ball == 0) {
         winnerCondition = "winning_ball = '0'";
-      } else if (winner_ball == 8) {
-        winnerCondition =
-          "winning_ball IN ('1', '2', '3', '4', '5', '6', '7', '8')";
-      } else if (winner_ball == 9) {
-        winnerCondition =
-          "winning_ball IN ('9', '10', '11', '12', '13', '14', '15')";
-      } else {
+      }
+      // else if (winner_ball == 8) {
+      //   winnerCondition =
+      //     "winning_ball IN ('1', '2', '3', '4', '5', '6', '7', '8')";
+      // } else if (winner_ball == 9) {
+      //   winnerCondition =
+      //     "winning_ball IN ('9', '10', '11', '12', '13', '14', '15')";
+      // }
+      else {
         winnerCondition = `winning_ball = '${winner_ball}'`;
       }
 
@@ -442,7 +725,20 @@ exports.getGameUserByGameId = async (req, res, next) => {
         users: foundBall ? Number(foundBall.users) : 0,
       };
     });
-
+    let gameUsersCurent;
+    if (user_id) {
+      const gameUsersCurent1 = await pool.query(
+        "SELECT * FROM game_users WHERE game_id=$1 AND user_id=$2",
+        [game_id, user_id]
+      );
+      if (gameUsersCurent1.rows.length > 0) {
+        gameUsersCurent = gameUsersCurent1;
+      } else {
+        gameUsersCurent = null;
+      }
+    } else {
+      gameUsersCurent = null;
+    }
     res.json({
       error: false,
       game_details,
@@ -453,6 +749,7 @@ exports.getGameUserByGameId = async (req, res, next) => {
           ? Number(jackpot || 0)
           : Number(jackpot || 0).toFixed(2),
       participants_array,
+      user_selected_balls: gameUsersCurent === null ? [] : gameUsersCurent.rows,
       winners_array: winnersUsersArray,
       message: "Game Data Fetched Successfully",
     });

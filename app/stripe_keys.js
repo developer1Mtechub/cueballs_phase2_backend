@@ -6,5 +6,5 @@
 const SECRET_KEY = process.env.SECRET_KEY;
 const PUBLISHABLE_KEY = process.env.PUBLISHABLE_KEY;
 const admin_email = process.env.admin_email;
-
-module.exports = { SECRET_KEY, PUBLISHABLE_KEY, admin_email };
+const secret_key_hash = process.env.secret_key_hash;
+module.exports = { SECRET_KEY, PUBLISHABLE_KEY, admin_email, secret_key_hash };

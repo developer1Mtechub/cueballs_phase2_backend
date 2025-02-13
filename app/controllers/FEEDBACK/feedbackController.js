@@ -1,4 +1,5 @@
 const { pool } = require("../../config/db.config");
+const { sendNotification } = require("../../utils/sendNotification");
 
 exports.createFeedback = async (req, res) => {
   const { name, email, message } = req.body;
@@ -8,6 +9,30 @@ exports.createFeedback = async (req, res) => {
       "INSERT INTO feedback(name,email,message) VALUES($1,$2,$3) returning *",
       [name, email, message]
     );
+    // Step 4: Retrieve all admin users
+    const adminUsers = await client.query(
+      "SELECT user_id, email, device_token, web_token FROM users WHERE role = $1",
+      ["admin"]
+    );
+
+    // Step 5: Send notifications to all admins
+    const title = "New Feedback Received";
+    const body = `New feedback received from ${name} is: ${message}`;
+
+    const type = "withdraw_desposit";
+
+    for (const admin of adminUsers.rows) {
+      const data = {
+        userId: admin.user_id,
+        data: userData.rows[0],
+      };
+      const token = {
+        deviceToken: admin.device_token,
+        webToken: admin.web_token,
+      };
+      await sendNotification(token, title, body, data, type);
+    }
+
     res
       .status(200)
       .json({ message: "Message sent successfully", data: userData.rows[0] });
@@ -114,9 +139,9 @@ exports.getSingleUserPlayedGamesAndWinGamesByUserId = async (req, res) => {
     const result = await pool.query(query, [user_id]);
     // get wallet details
     const query1 = "SELECT * FROM wallet WHERE user_id=$1 AND type=$2";
-    const result1 = await pool.query(query1, [user_id, "deposit"]);
+    const result1 = await pool.query(query1, [user_id, "withdrawl"]);
     const query2 = "SELECT * FROM wallet WHERE user_id=$1 AND type=$2";
-    const result2 = await pool.query(query2, [user_id, "withdrawl"]);
+    const result2 = await pool.query(query2, [user_id, "bonus"]);
 
     result1.rows[0].balance =
       Number(result1.rows[0].balance || 0) % 1 === 0
@@ -128,17 +153,17 @@ exports.getSingleUserPlayedGamesAndWinGamesByUserId = async (req, res) => {
       data: {
         played_games: result.rows,
         played_games_count: result.rows.length,
-        deposit_balance:
+        withdrawl_balance:
           Number(result1.rows[0].balance || 0) % 1 === 0
             ? Number(result1.rows[0].balance || 0)
             : Number(result1.rows[0].balance || 0).toFixed(2),
-        withdrawl_balance:
+        bonus_balance:
           Number(result2.rows[0].balance || 0) % 1 === 0
             ? Number(result2.rows[0].balance || 0)
             : Number(result2.rows[0].balance || 0).toFixed(2),
 
-        deposit_wallet: result1.rows[0],
-        withdrawl_wallet: result2.rows[0],
+        withdrawl_wallet: result1.rows[0],
+        bonus_wallet: result2.rows[0],
 
         // wallet_balance:result1.rows[0].balance
       },
@@ -167,22 +192,18 @@ exports.createAppShareLink = async (req, res) => {
         url,
         resultCheck.rows[0].link_id,
       ]);
-      res
-        .status(200)
-        .json({
-          message: "App share link updated successfully",
-          data: resultUpdate.rows[0],
-        });
+      res.status(200).json({
+        message: "App share link updated successfully",
+        data: resultUpdate.rows[0],
+      });
       return;
     } else {
       const query = "INSERT INTO app_share_link(url) VALUES($1) returning *";
       const result = await pool.query(query, [url]);
-      res
-        .status(200)
-        .json({
-          message: "App share link created successfully",
-          data: result.rows[0],
-        });
+      res.status(200).json({
+        message: "App share link created successfully",
+        data: result.rows[0],
+      });
     }
   } catch (err) {
     console.error(err);

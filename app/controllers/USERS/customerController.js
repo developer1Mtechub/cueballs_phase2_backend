@@ -3,6 +3,9 @@ const crypto = require("crypto");
 const WelcomeEmail = require("../../welcomeEmail");
 const VerificationEmail = require("../../emailVerification");
 const { secret_key_hash } = require("../../stripe_keys");
+const { sendNotification } = require("../../utils/sendNotification");
+const WelcomeEmailSubadmin = require("../../welcomeEmailsubadmin");
+const moment = require("moment");
 
 // user Registration
 exports.registerCustomer = async (req, res, next) => {
@@ -42,10 +45,9 @@ exports.registerCustomer = async (req, res, next) => {
         let hashedPassword = null;
         if (password === null || password === "" || password === undefined) {
         } else {
-          const salt = "mySalt";
           hashedPassword = crypto
             .createHash("sha256")
-            .update(password + salt)
+            .update(password + secret_key_hash)
             .digest("hex");
         }
         const deleted_user = false;
@@ -54,7 +56,7 @@ exports.registerCustomer = async (req, res, next) => {
         const win_games = 0;
 
         const userData = await pool.query(
-          "INSERT INTO users(user_name,email,password,signup_type,access_token,deleted_user,account_status,played_games,win_games,device_token,web_token) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) returning *",
+          "INSERT INTO users(user_name,email,password,signup_type,access_token,deleted_user,account_status,played_games,win_games,device_token,web_token,role) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) returning *",
           [
             user_name || null,
             email,
@@ -67,6 +69,7 @@ exports.registerCustomer = async (req, res, next) => {
             win_games,
             device_token || null,
             web_token || null,
+            "user",
           ]
         );
         if (userData.rows.length === 0) {
@@ -78,7 +81,7 @@ exports.registerCustomer = async (req, res, next) => {
           // create wallet
           const walletData = await pool.query(
             "INSERT INTO wallet(user_id,balance,type) VALUES($1,$2,$3) returning *",
-            [user_id, balance, "deposit"]
+            [user_id, balance, "bonus"]
           );
           const walletData1 = await pool.query(
             "INSERT INTO wallet(user_id,balance,type) VALUES($1,$2,$3) returning *",
@@ -118,6 +121,197 @@ exports.registerCustomer = async (req, res, next) => {
     client.release();
   }
 };
+exports.registerCustomer1 = async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const { email, password, caller_id, agent_name, permissions } = req.body;
+    // const company_user = false;
+    if (email === null || email === "" || email === undefined) {
+      res.json({ error: true, message: "Please Provide User Email" });
+    } else {
+      const userDataCheck = await pool.query(
+        "SELECT * FROM users WHERE email=$1",
+        [email]
+      );
+
+      if (userDataCheck.rows.length === 0) {
+        let hashedPassword = null;
+        if (password === null || password === "" || password === undefined) {
+        } else {
+          hashedPassword = crypto
+            .createHash("sha256")
+            .update(password + secret_key_hash)
+            .digest("hex");
+        }
+
+        const userData = await pool.query(
+          "INSERT INTO users(email,password,role,caller_id,agent_name,permissions,account_status,signup_type,deleted_user) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) returning *",
+          [
+            email,
+            hashedPassword || null,
+            "subadmin",
+            caller_id,
+            agent_name,
+            permissions,
+            "active",
+            "email",
+            false,
+          ]
+        );
+        if (userData.rows.length === 0) {
+          res.json({ error: true, data: [], message: "Can't Create User" });
+        } else {
+          const data = userData.rows[0];
+          const user_id = userData.rows[0].user_id;
+          const balance = 0;
+          // create wallet
+          const walletData = await pool.query(
+            "INSERT INTO wallet(user_id,balance,type) VALUES($1,$2,$3) returning *",
+            [user_id, balance, "withdrawl"]
+          );
+          const walletData1 = await pool.query(
+            "INSERT INTO wallet(user_id,balance,type) VALUES($1,$2,$3) returning *",
+            [user_id, balance, "bonus"]
+          );
+          // Email
+          const subject = "Welcome Email";
+          WelcomeEmailSubadmin(email, subject, password);
+
+          res.json({
+            error: false,
+            data,
+            wallet: walletData.rows[0],
+            message: "Agent Created Successfully",
+          });
+        }
+      } else {
+        console.log(userDataCheck.rows[0].deleted_user);
+        const deletedStatus = userDataCheck.rows[0].deleted_user;
+        if (deletedStatus === true || deletedStatus === "true") {
+          // user has been deleted response
+          res.json({
+            error: true,
+            data: [],
+            message: "This email has account deleted",
+          });
+        } else {
+          const data = userDataCheck.rows[0];
+          res.json({ error: true, data, message: "Email Already Exist" });
+        }
+      }
+    }
+  } catch (err) {
+    console.log(err);
+    res.json({ error: true, data: [], message: "Catch eror" });
+  } finally {
+    client.release();
+  }
+};
+
+exports.get_subadmin = async (req, res) => {
+  const client = await pool.connect();
+  try {
+    let { page, limit } = req.query;
+
+    // Set default values if not provided
+    page = parseInt(page) || 1;
+    limit = parseInt(limit) || 10;
+    const offset = (page - 1) * limit;
+
+    // Query to get total count for pagination metadata
+    const countResult = await pool.query(
+      "SELECT COUNT(*) FROM users WHERE role = 'subadmin' "
+    );
+    const totalRows = parseInt(countResult.rows[0].count);
+    const totalPages = Math.ceil(totalRows / limit);
+
+    // Query to fetch paginated sub-admins
+    const subadmin = await pool.query(
+      "SELECT * FROM users WHERE role = 'subadmin' AND deleted_user = 'false' ORDER BY created_at LIMIT $1 OFFSET $2",
+      [limit, offset]
+    );
+
+    res.status(200).json({
+      error: false,
+      page,
+      limit,
+      totalRows,
+      totalPages,
+      data: subadmin.rows,
+    });
+  } catch (error) {
+    console.error("Error fetching sub-admins:", error);
+    res.status(500).json({ error: true, message: "Server error" });
+  } finally {
+    client.release();
+  }
+};
+exports.update_subadmin = async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { user_id, agent_name, caller_id, permissions } = req.body;
+    const userData = await pool.query(
+      "UPDATE users SET agent_name=$1,caller_id=$2,permissions=$3 WHERE user_id=$4 RETURNING *",
+      [agent_name, caller_id, permissions, user_id]
+    );
+    res.status(200).json({
+      error: false,
+      message: "Subadmin Updated Successfully",
+      data: userData.rows[0],
+    });
+  } catch (error) {
+    console.error("Error updating subadmin:", error);
+    res.status(500).json({ error: true, message: "Server error" });
+  } finally {
+    client.release();
+  }
+};
+// update subadmin password
+exports.update_subadmin_password = async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { user_id, password } = req.body;
+    let hashedPassword = null;
+    hashedPassword = crypto
+      .createHash("sha256")
+      .update(password + secret_key_hash)
+      .digest("hex");
+    const userData = await pool.query(
+      "UPDATE users SET password=$1 WHERE user_id=$2 RETURNING *",
+      [hashedPassword, user_id]
+    );
+    res.status(200).json({
+      error: false,
+      message: "Subadmin Password Updated Successfully",
+      data: userData.rows[0],
+    });
+  } catch (error) {
+    console.error("Error updating subadmin password:", error);
+    res.status(500).json({ error: true, message: "Server error" });
+  } finally {
+    client.release();
+  }
+};
+exports.delete_subadmin = async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { user_id } = req.body;
+    const userData = await pool.query(
+      "UPDATE users SET deleted_user=true WHERE user_id=$1 RETURNING *",
+      [user_id]
+    );
+    res.status(200).json({
+      error: false,
+      message: "Subadmin Deleted Successfully",
+      data: userData.rows[0],
+    });
+  } catch (error) {
+    console.error("Error deleting subadmin:", error);
+    res.status(500).json({ error: true, message: "Server error" });
+  } finally {
+    client.release();
+  }
+};
 exports.signinCustomer = async (req, res) => {
   const client = await pool.connect();
   try {
@@ -135,8 +329,8 @@ exports.signinCustomer = async (req, res) => {
     }
 
     const userDataCheck = await pool.query(
-      "SELECT * FROM users WHERE email=$1",
-      [email]
+      "SELECT * FROM users WHERE email=$1 AND role=$2",
+      [email, "user"]
     );
 
     if (userDataCheck.rows.length === 0) {
@@ -237,11 +431,11 @@ exports.signinCustomer = async (req, res) => {
         });
       } else {
         // Email/Password login
-        const salt = "mySalt";
+
         const hashedPasswordFromDb = user.password;
         const hashedUserEnteredPassword = crypto
           .createHash("sha256")
-          .update(password + salt)
+          .update(password + secret_key_hash)
           .digest("hex");
 
         if (hashedPasswordFromDb === hashedUserEnteredPassword) {
@@ -306,6 +500,7 @@ exports.addMoneyToWallet = async (req, res) => {
       "SELECT * FROM users WHERE user_id = $1",
       [user_id]
     );
+    let user_data = userResult.rows[0];
     if (userResult.rows.length === 0) {
       return res.status(404).json({
         error: true,
@@ -315,40 +510,65 @@ exports.addMoneyToWallet = async (req, res) => {
 
     // Fetch the user's wallet
     const walletResult = await pool.query(
-      "SELECT * FROM wallet WHERE user_id = $1",
-      [user_id]
+      "SELECT * FROM wallet WHERE user_id = $1 AND type = $2",
+      [user_id, "withdrawl"]
     );
     let wallet;
-
+    console.log("wallet result", walletResult.rows[0]);
+    let balance = 0;
+    let prev_amount = walletResult.rows[0].balance;
+    balance = parseFloat(prev_amount) + parseFloat(amount);
     if (walletResult.rows.length === 0) {
       // If the wallet doesn't exist, create a new one
       const newWallet = await pool.query(
         `INSERT INTO wallet (user_id, balance,type) VALUES ($1, $2,$3) RETURNING *`,
-        [user_id, parsedAmount.toFixed(2), "deposit"]
+        [user_id, balance.toFixed(2), "withdrawl"]
       );
       wallet = newWallet.rows[0];
     } else {
       // If the wallet exists, update the balance
       wallet = walletResult.rows[0];
-      const updatedBalance = parseFloat(wallet.balance || "0") + parsedAmount;
+      // const updatedBalance = parseFloat(wallet.balance || "0") + parsedAmount;
       const updatedWallet = await pool.query(
         `UPDATE wallet SET balance = $1, updated_at = NOW() WHERE user_id = $2 AND type=$3 RETURNING *`,
-        [updatedBalance.toFixed(2), user_id, "deposit"]
+        [balance.toFixed(2), user_id, "withdrawl"]
       );
       wallet = updatedWallet.rows[0];
     }
 
     // Log the transaction in transaction_history
-    await pool.query(
-      `INSERT INTO transaction_history (user_id, amount, type, money_type,screenshoot) 
-       VALUES ($1, $2, $3, $4,$5)`,
+
+    let result = await pool.query(
+      `INSERT INTO transaction_history (user_id, amount, type, money_type_details,screenshoot,money_type)
+       VALUES ($1, $2, $3, $4,$5,$6) RETURNING *`,
       [
         user_id,
-        parsedAmount.toFixed(2),
-        "credit",
+        balance.toFixed(2),
+        "deposit",
         formattedMoneyType,
         screenshoot || null,
+        "manual",
       ]
+    );
+    let token = {
+      deviceToken: user_data.device_token,
+      webToken: user_data.web_token,
+    };
+    const title = `Money Added`;
+    const body = `Money has been added to your wallet.`;
+    const type = "manual_deposit";
+    console.log("result", result);
+    const data = {
+      user_id: user_id,
+      result: result.rows[0],
+    };
+
+    sendNotification(token, title, body, data, type);
+    console.log(`Notification sent to user ${user_id}`);
+
+    await pool.query(
+      "INSERT INTO notifications (user_id, title, body, type) VALUES ($1, $2, $3, $4)",
+      [user_id, title, body, type]
     );
 
     // Respond with the updated wallet information
@@ -495,10 +715,10 @@ exports.resetPassword = async (req, res) => {
   const client = await pool.connect();
   try {
     const { email, password } = req.body;
-    const salt = "mySalt";
+
     const hashedPassword = crypto
       .createHash("sha256")
-      .update(password + salt)
+      .update(password + secret_key_hash)
       .digest("hex");
     // const company_user = false;
     if (email === null || email === "" || email === undefined) {
@@ -586,14 +806,14 @@ exports.resetPasswordProfile = async (req, res) => {
   const client = await pool.connect();
   try {
     const { email, old_password, new_password } = req.body;
-    const salt = "mySalt";
+
     const hashedOldPassword = crypto
       .createHash("sha256")
-      .update(old_password + salt)
+      .update(old_password + secret_key_hash)
       .digest("hex");
     const hashedPassword = crypto
       .createHash("sha256")
-      .update(new_password + salt)
+      .update(new_password + secret_key_hash)
       .digest("hex");
     // const company_user = false;
     if (email === null || email === "" || email === undefined) {
@@ -693,8 +913,8 @@ exports.signinAdmin = async (req, res) => {
       res.json({ error: true, message: "Please Provide Email" });
     } else {
       const userDataCheck = await pool.query(
-        "SELECT * FROM users WHERE email=$1 AND signup_type=$2",
-        [email, "admin"]
+        "SELECT * FROM users WHERE email=$1 AND deleted_user!=$2",
+        [email, true]
       );
 
       if (userDataCheck.rows.length === 0) {
@@ -706,8 +926,11 @@ exports.signinAdmin = async (req, res) => {
       } else {
         // login
         const hashedPasswordFromDb = userDataCheck.rows[0].password;
+        let admin_details = userDataCheck.rows[0];
+
         const hashedUserEnteredPassword = crypto
           .createHash("sha256")
+
           .update(password + secret_key_hash)
           .digest("hex");
         const subject = "Verify Email";
@@ -748,6 +971,7 @@ exports.signinAdmin = async (req, res) => {
                 error: false,
                 otp: resetLink,
                 message: "Email sent successfully!",
+                admin_details,
               });
               VerificationEmail(email, subject, resetLink);
             }
@@ -769,6 +993,7 @@ exports.signinAdmin = async (req, res) => {
                 error: false,
                 otp: resetLink,
                 message: "Email sent successfully!",
+                admin_details,
               });
               VerificationEmail(email, subject, resetLink);
             }
@@ -978,10 +1203,10 @@ exports.getAllUsers = async (req, res) => {
   try {
     // const query1 = 'SELECT * FROM users WHERE deleted_user=$1 AND signup_type != $2 ORDER BY created_at DESC'
     const query1 =
-      "SELECT * FROM users WHERE deleted_user=$1 ORDER BY created_at DESC";
+      "SELECT * FROM users WHERE deleted_user=$1 AND role=$2 ORDER BY created_at DESC";
 
     // const result1 = await pool.query(query1, [false,'admin']);
-    const result1 = await pool.query(query1, [false]);
+    const result1 = await pool.query(query1, [false, "user"]);
 
     if (result1.rows.length === 0) {
       res.json({ error: true, message: "No Users Found" });
@@ -1099,14 +1324,13 @@ exports.getAllUsersPagination = async (req, res) => {
     const { page, limit } = req.query;
     const offset = (page - 1) * limit;
     const query1 =
-      "SELECT * FROM users WHERE deleted_user=$1 AND signup_type != $2 ORDER BY user_id DESC LIMIT $3 OFFSET $4";
-    const result1 = await pool.query(query1, [false, "admin", limit, offset]);
+      "SELECT * FROM users WHERE deleted_user=$1 AND role = $2 ORDER BY user_id DESC LIMIT $3 OFFSET $4";
+    const result1 = await pool.query(query1, [false, "user", limit, offset]);
     if (result1.rows.length === 0) {
       res.json({ error: true, message: "No Users Found" });
     } else {
-      const query2 =
-        "SELECT * FROM users WHERE deleted_user=$1 AND signup_type != $2";
-      const result2 = await pool.query(query2, [false, "admin"]);
+      const query2 = "SELECT * FROM users WHERE deleted_user=$1 AND role = $2";
+      const result2 = await pool.query(query2, [false, "user"]);
       const total = result2.rows.length;
       res.json({
         error: false,
@@ -1175,11 +1399,11 @@ exports.getUsersByYear = async (req, res) => {
     const query = `
             SELECT EXTRACT(MONTH FROM created_at) AS month, COUNT(*) AS count
             FROM users
-            WHERE EXTRACT(YEAR FROM created_at) = $1 AND signup_type != $2
+            WHERE EXTRACT(YEAR FROM created_at) = $1 AND role = $2
             GROUP BY month
             ORDER BY month ASC
         `;
-    const result = await pool.query(query, [year, "admin"]);
+    const result = await pool.query(query, [year, "user"]);
     const counts = Array(12).fill(0); // initialize an array with 12 zeros
     for (const row of result.rows) {
       counts[row.month - 1] = row.count; // subtract 1 because months are 1-indexed
@@ -1213,8 +1437,8 @@ exports.getTop5RecentRegisteredUsers = async (req, res) => {
   const client = await pool.connect();
   try {
     const query1 =
-      "SELECT * FROM users WHERE deleted_user=$1 ORDER BY created_at DESC LIMIT 5";
-    const result1 = await pool.query(query1, [false]);
+      "SELECT * FROM users WHERE deleted_user=$1 AND role=$2 ORDER BY created_at DESC LIMIT 5";
+    const result1 = await pool.query(query1, [false, "user"]);
     if (result1.rows.length === 0) {
       res.json({ error: true, message: "No Users Found" });
     } else {
@@ -1238,7 +1462,7 @@ exports.getSpecificUserById = async (req, res) => {
       const query1 = "SELECT * FROM users WHERE user_id =$1";
       const result1 = await pool.query(query1, [user_id]);
       const query2 = "SELECT * FROM wallet WHERE user_id =$1 AND type=$2";
-      const result2 = await pool.query(query2, [user_id, "deposit"]);
+      const result2 = await pool.query(query2, [user_id, "bonus"]);
       const query3 = "SELECT * FROM wallet WHERE user_id =$1 AND type=$2";
       const result3 = await pool.query(query3, [user_id, "withdrawl"]);
       if (result1.rows.length === 0) {
@@ -1247,7 +1471,7 @@ exports.getSpecificUserById = async (req, res) => {
         res.json({
           error: false,
           data: result1.rows,
-          deposit_wallet:
+          bonus_wallet:
             Number(result2.rows[0].balance || 0) % 1 === 0
               ? Number(result2.rows[0].balance || 0)
               : Number(result2.rows[0].balance || 0).toFixed(2),
@@ -1264,6 +1488,166 @@ exports.getSpecificUserById = async (req, res) => {
   } catch (err) {
     console.log(err);
     res.json({ error: true, data: [], message: "Catch eror" });
+  } finally {
+    client.release();
+  }
+};
+
+exports.getUserTransactionsWithDateRange = async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { user_id, start_date, end_date } = req.query;
+
+    // Validate user_id
+    if (!user_id) {
+      return res
+        .status(400)
+        .json({ error: true, message: "Please provide User ID" });
+    }
+
+    // Validate and convert date format from "DD-MM-YYYY" to "YYYY-MM-DD"
+    let formattedStartDate = moment(start_date, "DD-MM-YYYY").format(
+      "YYYY-MM-DD"
+    );
+    let formattedEndDate = moment(end_date, "DD-MM-YYYY").format("YYYY-MM-DD");
+
+    // Check if dates are valid
+    if (
+      !moment(formattedStartDate, "YYYY-MM-DD", true).isValid() ||
+      !moment(formattedEndDate, "YYYY-MM-DD", true).isValid()
+    ) {
+      return res.status(400).json({
+        error: true,
+        message: "Invalid date format. Please use DD-MM-YYYY.",
+      });
+    }
+
+    // Step 1: Check if user exists
+    const userResult = await pool.query(
+      "SELECT * FROM users WHERE user_id = $1",
+      [user_id]
+    );
+    if (userResult.rows.length === 0) {
+      return res
+        .status(404)
+        .json({ error: true, message: "User ID does not exist" });
+    }
+
+    // Step 2: Get wallet balances
+    const walletQuery = "SELECT type, balance FROM wallet WHERE user_id = $1";
+    const walletResult = await pool.query(walletQuery, [user_id]);
+
+    let bonusWallet = 0;
+    let withdrawalWallet = 0;
+
+    walletResult.rows.forEach((wallet) => {
+      if (wallet.type === "bonus") {
+        bonusWallet = parseFloat(wallet.balance) || 0;
+      } else if (wallet.type === "withdrawl") {
+        withdrawalWallet = parseFloat(wallet.balance) || 0;
+      }
+    });
+
+    // Step 3: Get transactions within the date range
+    const transactionQuery = `
+      SELECT * FROM transaction_history
+      WHERE user_id = $1 AND created_at BETWEEN $2 AND $3
+      ORDER BY created_at DESC
+    `;
+    const transactionResult = await pool.query(transactionQuery, [
+      user_id,
+      formattedStartDate,
+      formattedEndDate,
+    ]);
+
+    res.status(200).json({
+      error: false,
+      message: "User transactions retrieved successfully",
+      user: userResult.rows[0],
+      transactions: transactionResult.rows,
+      bonus_wallet: bonusWallet.toFixed(2),
+      withdrawal_wallet: withdrawalWallet.toFixed(2),
+    });
+  } catch (err) {
+    console.error("Error in getUserTransactionsWithDateRange:", err);
+    res.status(500).json({ error: true, message: "Internal server error" });
+  } finally {
+    client.release();
+  }
+};
+
+exports.getGamesByDateRange = async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    const { start_date, end_date } = req.query;
+
+    // Validate and convert date format from "DD-MM-YYYY" to "YYYY-MM-DD"
+    let formattedStartDate = moment(start_date, "DD-MM-YYYY").format(
+      "YYYY-MM-DD"
+    );
+    let formattedEndDate = moment(end_date, "DD-MM-YYYY").format("YYYY-MM-DD");
+
+    // Check if dates are valid
+    if (
+      !moment(formattedStartDate, "YYYY-MM-DD", true).isValid() ||
+      !moment(formattedEndDate, "YYYY-MM-DD", true).isValid()
+    ) {
+      return res.status(400).json({
+        error: true,
+        message: "Invalid date format. Please use DD-MM-YYYY.",
+      });
+    }
+
+    // Fetch games played within the given date range
+    const gamesQuery = `
+      SELECT * FROM games 
+      WHERE played_at::date BETWEEN $1 AND $2
+      ORDER BY played_at DESC
+    `;
+    const gamesResult = await pool.query(gamesQuery, [
+      formattedStartDate,
+      formattedEndDate,
+    ]);
+
+    if (gamesResult.rows.length === 0) {
+      return res.status(404).json({
+        error: true,
+        message: "No games found within the specified date range",
+      });
+    }
+
+    // Fetch users who participated in these games
+    const gameIds = gamesResult.rows.map((game) => game.game_id);
+    const gameUsersQuery = `
+      SELECT * FROM game_users 
+      WHERE game_id = ANY($1)
+    `;
+    const gameUsersResult = await pool.query(gameUsersQuery, [gameIds]);
+
+    // Organize game users by game_id
+    const gameUsersMap = {};
+    gameUsersResult.rows.forEach((user) => {
+      if (!gameUsersMap[user.game_id]) {
+        gameUsersMap[user.game_id] = [];
+      }
+      gameUsersMap[user.game_id].push(user);
+    });
+
+    // Attach users to each game
+    const gamesWithUsers = gamesResult.rows.map((game) => ({
+      ...game,
+      participants: gameUsersMap[game.game_id] || [],
+    }));
+
+    res.status(200).json({
+      error: false,
+      message: "Games retrieved successfully",
+      games: gamesWithUsers,
+    });
+  } catch (err) {
+    console.error("Error in getGamesByDateRange:", err);
+    res.status(500).json({ error: true, message: "Internal server error" });
   } finally {
     client.release();
   }

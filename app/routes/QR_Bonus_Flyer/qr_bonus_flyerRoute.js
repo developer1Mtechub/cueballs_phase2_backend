@@ -4,6 +4,9 @@ const controller = require("../../controllers/QR_BONUS_FLYER/qr_bonus_flyerContr
 
 // qr_bonus_flyer
 router.post("/create_qr_bonus_flyer", controller.createqr_bonus_flyer);
+// validate bonus fyer
+router.post("/validate_bonus_flyer", controller.validate_bonus_flyer);
+
 router.get("/get_all_qr_bonus_flyer", controller.getAllqr_bonus_flyer);
 router.get(
   "/get_all_qr_bonus_flyer_pagination",

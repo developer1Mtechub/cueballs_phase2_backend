@@ -3,15 +3,12 @@ require("dotenv").config();
 const fs = require("fs");
 
 const pool = new Pool({
-  // host: "postgres-db.caprover.cueballdash.com",
-  // host: 'https://pg-admin.caprover.cueballdash.com',
-  host: "postgres-staging-projects.mtechub.com",
-
+  host: "testing-team-postgres.caprover.mtechub.org",
   port: 5432,
-  user: "hrm_user",
-  password: "mtechub123",
+  user: "rimshariaz@mtechub.org",
+  password: "Mtechub@123",
   // database: "cueballs",
-  database: "cueballs_phase2_frontend",
+  database: "cueball-phase2-staging",
 
   max: 10,
 });
