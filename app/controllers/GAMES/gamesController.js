@@ -5444,3 +5444,40 @@ exports.markNotificationRead = async (req, res, next) => {
     client.release();
   }
 };
+exports.markALLNotificationRead = async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const { is_read, user_id } = req.body;
+
+    if (typeof is_read !== "boolean" || !user_id) {
+      return res.json({
+        error: true,
+        message:
+          "Invalid parameters. Provide is_read (true/false) and user_id.",
+      });
+    }
+
+    const result = await pool.query(
+      "UPDATE notifications SET is_read = $1 WHERE user_id = $2 RETURNING *",
+      [is_read, user_id]
+    );
+
+    if (result.rowCount === 0) {
+      return res.json({
+        error: true,
+        message: "Notification not found or already updated.",
+      });
+    }
+
+    res.json({
+      error: false,
+      message: `Notification  marked as ${is_read ? "read" : "unread"}.`,
+      data: result.rows[0],
+    });
+  } catch (err) {
+    console.error("Error updating notification status:", err);
+    res.json({ error: true, message: "Internal server error." });
+  } finally {
+    client.release();
+  }
+};

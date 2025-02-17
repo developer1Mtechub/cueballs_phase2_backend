@@ -23,6 +23,7 @@ router.get("/get_scheduled_gamesv2_mine", controller.getScheduledGamesv2Mine);
 // getAllNotifications
 router.get("/get_all_notifications", controller.getAllNotifications);
 router.put("/mark_notification_read", controller.markNotificationRead);
+router.put("/mark_all_notification_read", controller.markALLNotificationRead);
 
 // getCompletedGameLatestByUserId
 router.get(
