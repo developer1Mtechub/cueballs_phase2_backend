@@ -266,191 +266,6 @@ app.post("/create_payment_paypal-db-v1", async (req, res) => {
       const restarted_round = gameAountCheck?.rows[0]?.restarted_round;
       console.log("restratedstatus", gameAountCheck.rows[0]);
       if (gameAountCheck.rows.length > 0) {
-        // if (restratedstatus === true) {
-        //   // select game users count by user id and game id
-        //   const gameUserCheck = await pool.query(
-        //     "SELECT * FROM game_users WHERE game_id=$1 AND user_id=$2",
-        //     [game_id, user_id]
-        //   );
-        //   if (gameUserCheck.rows.length === 0) {
-        //     console.log("zero");
-        //     // Restarted
-        //     let EntryFee = gameAountCheck.rows[0].entry_fee;
-        //     console.log(EntryFee);
-        //     if (parseFloat(Balance) < parseFloat(EntryFee)) {
-        //       console.log("less");
-        //       res.json({
-        //         error: true,
-        //         insufficientBalnace: true,
-        //         data: [],
-        //         message: "Insufficient Balance",
-        //       });
-        //     } else {
-        //       console.log("big");
-        //       // Charge
-        //       const gameUser = await pool.query(
-        //         "INSERT INTO game_users (game_id, user_id,round_no) VALUES ($1, $2,$3) RETURNING *",
-        //         [game_id, user_id, restarted_round]
-        //       );
-        //       if (gameUser.rows.length > 0) {
-        //         console.log("Game User Added Successfully");
-        //         // Minus amount from wallet
-        //         const wallet = await pool.query(
-        //           "UPDATE wallet SET balance=$1 WHERE user_id=$2 AND type=$3 RETURNING *",
-        //           [
-        //             parseFloat(Balance) - parseFloat(EntryFee),
-        //             user_id,
-        //             "withdrawl",
-        //           ]
-        //         );
-        //         if (wallet.rows.length > 0) {
-        //           console.log(" Minus amount from wallet ");
-        //           const entryfeecut = parseFloat(EntryFee);
-        //           console.log(" Minus amount from wallet ");
-        //           const gameTransactions = await pool.query(
-        //             "INSERT INTO transaction_history (user_id, amount,type,game_id) VALUES ($1, $2,$3,$4) RETURNING *",
-        //             [user_id, entryfeecut, "entry fees", game_id]
-        //           );
-        //           console.log(gameTransactions.rows); //     res.json({
-        //         }
-
-        //         const date = new Date();
-        //         const month = date.toLocaleString("default", {
-        //           month: "short",
-        //         });
-        //         const day = date.getDate();
-        //         const year = date.getFullYear();
-        //         const dateToday = month + " " + day + "," + year;
-        //         const subject = "Payment Successfull";
-
-        //         const gameUserTotal = await pool.query(
-        //           "SELECT * FROM game_users WHERE game_id=$1",
-        //           [game_id]
-        //         );
-        //         let game_participants = gameUserTotal.rows.length;
-        //         let jackpot = parseInt(game_participants) * parseInt(EntryFee);
-        //         console.log("game_participants", game_participants);
-        //         console.log("jackpot", jackpot);
-
-        //         PaymentSuccess(
-        //           user_email,
-        //           subject,
-        //           game_id,
-        //           EntryFee,
-        //           game_participants,
-        //           jackpot,
-        //           dateToday
-        //         );
-        //         res.json({
-        //           error: false,
-        //           data: gameUser.rows,
-        //           message: "Game User Added Successfully",
-        //         });
-        //       } else {
-        //         console.log("Game User Not Added Successfully");
-        //         res.json({
-        //           error: true,
-        //           message: "Game User Not Added Successfully",
-        //         });
-        //       }
-        //     }
-        //   } else {
-        //     let gameusersLength = parseInt(gameUserCheck.rows.length);
-        //     let game_ropundd = parseInt(restarted_round) + parseInt(1);
-        //     if (parseInt(gameusersLength) >= parseInt(game_ropundd)) {
-        //       res.json({
-        //         error: true,
-        //         message: "You cant add more balls in this game",
-        //       });
-        //     } else {
-        //       // Restarted
-        //       let EntryFee = gameAountCheck.rows[0].entry_fee;
-        //       console.log(EntryFee);
-        //       if (parseFloat(Balance) < parseFloat(EntryFee)) {
-        //         console.log("less");
-        //         res.json({
-        //           error: true,
-        //           insufficientBalnace: true,
-        //           data: [],
-        //           message: "Insufficient Balance",
-        //         });
-        //       } else {
-        //         console.log("big");
-        //         // Charge
-        //         const gameUser = await pool.query(
-        //           "INSERT INTO game_users (game_id, user_id,round_no) VALUES ($1, $2,$3) RETURNING *",
-        //           [game_id, user_id, restarted_round]
-        //         );
-        //         if (gameUser.rows.length > 0) {
-        //           console.log("Game User Added Successfully");
-        //           // Minus amount from wallet
-        //           const wallet = await pool.query(
-        //             "UPDATE wallet SET balance=$1 WHERE user_id=$2 AND type=$3 RETURNING *",
-        //             [
-        //               parseFloat(Balance) - parseFloat(EntryFee),
-        //               user_id,
-        //               "withdrawl",
-        //             ]
-        //           );
-        //           if (wallet.rows.length > 0) {
-        //             console.log(" Minus amount from wallet ");
-        //             const entryfeecut = parseFloat(EntryFee);
-        //             console.log(" Minus amount from wallet ");
-        //             const gameTransactions = await pool.query(
-        //               "INSERT INTO transaction_history (user_id, amount,type,game_id) VALUES ($1, $2,$3,$4) RETURNING *",
-        //               [user_id, entryfeecut, "entry fees", game_id]
-        //             );
-        //             console.log(gameTransactions.rows);
-        //           }
-
-        //           const date = new Date();
-        //           const month = date.toLocaleString("default", {
-        //             month: "short",
-        //           });
-        //           const day = date.getDate();
-        //           const year = date.getFullYear();
-        //           const dateToday = month + " " + day + "," + year;
-        //           const subject = "Payment Successfull";
-
-        //           const gameUserTotal = await pool.query(
-        //             "SELECT * FROM game_users WHERE game_id=$1",
-        //             [game_id]
-        //           );
-        //           let game_participants = gameUserTotal.rows.length;
-        //           let jackpot =
-        //             parseInt(game_participants) * parseInt(EntryFee);
-        //           console.log("game_participants", game_participants);
-        //           console.log("jackpot", jackpot);
-        //           console.log("user_email", user_email);
-
-        //           PaymentSuccess(
-        //             user_email,
-        //             subject,
-        //             game_id,
-        //             EntryFee,
-        //             game_participants,
-        //             jackpot,
-        //             dateToday
-        //           );
-        //           res.json({
-        //             error: false,
-        //             data: gameUser.rows,
-        //             message: "Game User Added Successfully",
-        //           });
-        //         } else {
-        //           console.log("Game User Not Added Successfully");
-        //           res.json({
-        //             error: true,
-        //             message: "Game User Not Added Successfully",
-        //           });
-        //         }
-        //       }
-        //     }
-        //   }
-        //   console.log("RESTRARDED");
-
-        //   // end
-        // } else {
         let EntryFee = gameAountCheck.rows[0].entry_fee;
         console.log(EntryFee);
         if (parseFloat(Balance) < parseFloat(EntryFee)) {
@@ -482,7 +297,7 @@ app.post("/create_payment_paypal-db-v1", async (req, res) => {
                 [
                   parseFloat(Balance) - parseFloat(EntryFee),
                   user_id,
-                  "withdrawl",
+                  wallet_type,
                 ]
               );
               if (wallet.rows.length > 0) {
@@ -586,104 +401,115 @@ app.post("/create_payment_paypal-db-v1", async (req, res) => {
 // Paypal add money to wallet
 app.post("/create_payment_paypal-db-wallet", async (req, res) => {
   const { user_id, amount, bonus_flyer_id, payment_type } = req.body;
-  console.log(user_id);
-  // console.log(amount);
-  let final_amount;
-  let bonus_amount;
-  let flyer;
-
-  if (bonus_flyer_id) {
-    const qrBonusFlyer = await pool.query(
-      "SELECT * FROM qr_bonus_flyer WHERE qr_bonus_flyer_id=$1",
-      [bonus_flyer_id]
-    );
-    if (qrBonusFlyer.rows.length > 0) {
-      console.log(qrBonusFlyer.rows[0]);
-      flyer = qrBonusFlyer.rows[0];
-      // offer_amount = qrBonusFlyer.rows[0].offer_amount;
-      // Calculate total amount
-      const bonus_coins = parseFloat(flyer.bonus_coins);
-      const offer_percentage = parseFloat(flyer.offer_percentage);
-      bonus_amount = bonus_coins + bonus_coins * (offer_percentage / 100);
-      console.log("bonus_amount", bonus_amount);
-    }
-  }
-  if (bonus_flyer_id) {
-    final_amount = bonus_amount;
-    // + amount;
-  } else {
-    final_amount = amount;
-  }
-  console.log("final_amount", final_amount);
-  const userDataCheck = await pool.query(
-    "SELECT * FROM users WHERE user_id=$1",
-    [user_id]
-  );
-
-  if (userDataCheck.rows.length === 0) {
-    res.json({ error: true, data: [], message: "User Not Found" });
-  } else {
-    // add winning_amount_single to user wallet
-    let userWallet;
+  try {
+    console.log(user_id);
+    // console.log(amount);
+    let final_amount;
+    let bonus_amount;
+    let flyer;
 
     if (bonus_flyer_id) {
-      userWallet = await pool.query(
-        "SELECT * FROM wallet WHERE user_id=$1 AND type=$2",
-        [user_id, "bonus"]
+      const qrBonusFlyer = await pool.query(
+        "SELECT * FROM qr_bonus_flyer WHERE qr_bonus_flyer_id=$1",
+        [bonus_flyer_id]
       );
-    } else {
-      userWallet = await pool.query(
-        "SELECT * FROM wallet WHERE user_id=$1 AND type=$2",
-        [user_id, "withdrawl"]
-      );
+      if (qrBonusFlyer.rows.length > 0) {
+        console.log(qrBonusFlyer.rows[0]);
+        flyer = qrBonusFlyer.rows[0];
+        // offer_amount = qrBonusFlyer.rows[0].offer_amount;
+        // Calculate total amount
+        const bonus_coins = parseFloat(flyer.bonus_coins);
+        const offer_percentage = parseFloat(flyer.offer_percentage);
+        bonus_amount = bonus_coins + bonus_coins * (offer_percentage / 100);
+        console.log("bonus_amount", bonus_amount);
+      }
     }
+    if (bonus_flyer_id) {
+      final_amount = bonus_amount;
+      // + amount;
+    } else {
+      final_amount = amount;
+    }
+    console.log("final_amount", final_amount);
+    const userDataCheck = await pool.query(
+      "SELECT * FROM users WHERE user_id=$1",
+      [user_id]
+    );
 
-    if (userWallet.rows.length > 0) {
-      let wallet;
+    if (userDataCheck.rows.length === 0) {
+      res.json({ error: true, data: [], message: "User Not Found" });
+    } else {
+      console.log("hellonb");
+      // add winning_amount_single to user wallet
+      let userWallet;
 
       if (bonus_flyer_id) {
-        wallet = await pool.query(
-          "UPDATE wallet SET balance=$1 WHERE user_id=$2 AND type=$3  RETURNING *",
-          [
-            parseFloat(userWallet?.rows[0]?.balance) + parseFloat(final_amount),
-            user_id,
-            "bonus",
-          ]
+        userWallet = await pool.query(
+          "SELECT * FROM wallet WHERE user_id=$1 AND type=$2",
+          [user_id, "bonus"]
         );
       } else {
-        wallet = await pool.query(
-          "UPDATE wallet SET balance=$1 WHERE user_id=$2 AND type=$3  RETURNING *",
-          [
-            parseFloat(userWallet?.rows[0]?.balance) + parseFloat(final_amount),
-            user_id,
-            "withdrawl",
-          ]
+        userWallet = await pool.query(
+          "SELECT * FROM wallet WHERE user_id=$1 AND type=$2",
+          [user_id, "withdrawl"]
         );
       }
-      if (wallet.rows.length > 0) {
-        const type = "withdrawl";
-        const userDataTransaction = await pool.query(
-          "INSERT INTO transaction_history(user_id,amount,type, money_type,money_type_details ) VALUES($1,$2,$3,$4,$5) returning *",
-          [user_id, final_amount, type, payment_type, JSON.stringify(flyer)]
-        );
-        if (userDataTransaction.rows.length > 0) {
-          console.log("wallet updated");
-          res.json({
-            error: false,
-            wallet: wallet.rows[0],
-            message: "Amount Added to Wallet Successfully",
-          });
+      console.log(userWallet.rows);
+      if (userWallet.rows.length > 0) {
+        let wallet;
+
+        if (bonus_flyer_id) {
+          wallet = await pool.query(
+            "UPDATE wallet SET balance=$1 WHERE user_id=$2 AND type=$3  RETURNING *",
+            [
+              parseFloat(userWallet?.rows[0]?.balance) +
+                parseFloat(final_amount),
+              user_id,
+              "bonus",
+            ]
+          );
         } else {
-          res.json({
-            error: true,
-            data: [],
-            message: "Can't Update Transaction History",
-          });
+          wallet = await pool.query(
+            "UPDATE wallet SET balance=$1 WHERE user_id=$2 AND type=$3  RETURNING *",
+            [
+              parseFloat(userWallet?.rows[0]?.balance) +
+                parseFloat(final_amount),
+              user_id,
+              "withdrawl",
+            ]
+          );
         }
-      } else {
-        res.json({ error: true, data: [], message: "Something went wrong" });
+        console.log(wallet);
+        if (wallet.rows.length > 0) {
+          const type = "withdrawl";
+          const userDataTransaction = await pool.query(
+            "INSERT INTO transaction_history(user_id,amount,type, money_type,money_type_details ) VALUES($1,$2,$3,$4,$5) returning *",
+            [user_id, final_amount, type, payment_type, JSON.stringify(flyer)]
+          );
+          console.log(userDataTransaction);
+
+          if (userDataTransaction.rows.length > 0) {
+            console.log("wallet updated");
+            res.json({
+              error: false,
+              wallet: wallet.rows[0],
+              message: "Amount Added to Wallet Successfully",
+            });
+          } else {
+            res.json({
+              error: true,
+              data: [],
+              message: "Can't Update Transaction History",
+            });
+          }
+        } else {
+          // console.log("error", error);
+          res.json({ error: true, data: [], message: "Something went wrong" });
+        }
       }
     }
+  } catch (error) {
+    console.log("error", error);
   }
 });
 // payout check
