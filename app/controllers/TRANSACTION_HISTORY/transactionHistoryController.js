@@ -5,6 +5,8 @@ const {
   getAccessToken,
   PaypalSandBoxUrlmV2,
 } = require("../../paypal_keys");
+const stripe = require("stripe")(process.env.SECRET_KEY_STRIPE);
+
 const { sendNotification } = require("../../utils/sendNotification");
 // exports.createTransactionHistory = async (req, res) => {
 //   const { user_id, amount, email } = req.body;
