@@ -5363,10 +5363,8 @@ exports.getAllNotifications = async (req, res, next) => {
     let countValues = [];
 
     if (user_id) {
-      query += `AND (user_id = $${values.length + 1} OR user_id IS NULL) `;
-      countQuery += `AND (user_id = $${
-        countValues.length + 1
-      } OR user_id IS NULL) `;
+      query += `AND (user_id = $${values.length + 1} ) `;
+      countQuery += `AND (user_id = $${countValues.length + 1} ) `;
       values.push(user_id);
       countValues.push(user_id);
     }

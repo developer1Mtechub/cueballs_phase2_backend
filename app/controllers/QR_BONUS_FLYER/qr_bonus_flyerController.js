@@ -127,6 +127,123 @@ exports.validate_bonus_flyer = async (req, res) => {
     }
 
     // Step 2: Check if the user has already redeemed this flyer
+    // const redemptionQuery = `
+    //   SELECT *
+    //   FROM user_bonus_redemptions
+    //   WHERE user_id = $1 AND qr_bonus_flyer_id = $2
+    // `;
+    // const redemptionResult = await pool.query(redemptionQuery, [
+    //   user_id,
+    //   qr_bonus_flyer_id,
+    // ]);
+
+    // if (redemptionResult.rows.length > 0) {
+    //   return res.status(400).json({
+    //     error: true,
+    //     message: "User has already redeemed this bonus flyer",
+    //   });
+    // }
+
+    // Step 3: Mark the flyer as redeemed
+    // const redemptionInsert = `
+    //   INSERT INTO user_bonus_redemptions (user_id, qr_bonus_flyer_id,redeemed_at)
+    //   VALUES ($1, $2,$3)
+    //   RETURNING *
+    // `;
+    // const redemptionInsertResult = await pool.query(redemptionInsert, [
+    //   user_id,
+    //   qr_bonus_flyer_id,
+    //   normalizedDate,
+    // ]);
+
+    res.status(200).json({
+      error: false,
+      message: "Bonus flyer validated ",
+      data: {
+        flyer: flyer,
+        // redemption: redemptionInsertResult.rows[0],
+      },
+    });
+  } catch (err) {
+    console.error("Error validating bonus flyer:", err);
+    res.status(500).json({ error: true, message: "Internal server error" });
+  } finally {
+    client.release();
+  }
+};
+exports.apply_bonus_flyer = async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { user_id, qr_bonus_flyer_id, date } = req.body;
+
+    // Validate input
+    if (!user_id || !qr_bonus_flyer_id || !date) {
+      return res.status(400).json({
+        error: true,
+        message: "user_id, qr_bonus_flyer_id, and date are required",
+      });
+    }
+
+    // Normalize the date from the request
+    const normalizedDate = moment(date, [
+      "DD/MM/YYYY",
+      "YYYY-MM-DD",
+      "MM/DD/YYYY",
+    ]).format("YYYY-MM-DD");
+    if (!moment(normalizedDate, "YYYY-MM-DD", true).isValid()) {
+      return res.status(400).json({
+        error: true,
+        message: "Invalid date format",
+      });
+    }
+
+    // Step 1: Fetch the flyer and parse its dates
+    const flyerQuery = `SELECT * FROM qr_bonus_flyer WHERE qr_bonus_flyer_id = $1`;
+    const flyerResult = await pool.query(flyerQuery, [qr_bonus_flyer_id]);
+
+    if (flyerResult.rows.length === 0) {
+      return res.status(404).json({
+        error: true,
+        message: "Bonus flyer not found",
+      });
+    }
+
+    const flyer = flyerResult.rows[0];
+
+    // Parse `start_date` and `end_date` from TEXT to DATE for comparison
+    const flyerStartDate = moment(flyer.start_date, [
+      "DD/MM/YYYY",
+      "YYYY-MM-DD",
+      "MM/DD/YYYY",
+    ]).format("YYYY-MM-DD");
+    const flyerEndDate = moment(flyer.end_date, [
+      "DD/MM/YYYY",
+      "YYYY-MM-DD",
+      "MM/DD/YYYY",
+    ]).format("YYYY-MM-DD");
+
+    if (
+      !moment(flyerStartDate, "YYYY-MM-DD", true).isValid() ||
+      !moment(flyerEndDate, "YYYY-MM-DD", true).isValid()
+    ) {
+      return res.status(400).json({
+        error: true,
+        message: "Invalid start_date or end_date format in the flyer",
+      });
+    }
+
+    // Check if the provided date is within the valid range
+    if (
+      moment(normalizedDate).isBefore(flyerStartDate) ||
+      moment(normalizedDate).isAfter(flyerEndDate)
+    ) {
+      return res.status(400).json({
+        error: true,
+        message: "Bonus flyer expired or not valid for this date",
+      });
+    }
+
+    // Step 2: Check if the user has already redeemed this flyer
     const redemptionQuery = `
       SELECT * 
       FROM user_bonus_redemptions 

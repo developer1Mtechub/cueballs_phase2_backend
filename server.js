@@ -399,119 +399,244 @@ app.post("/create_payment_paypal-db-v1", async (req, res) => {
   }
 });
 // Paypal add money to wallet
+// app.post("/create_payment_paypal-db-wallet", async (req, res) => {
+//   const { user_id, amount, bonus_flyer_id, payment_type } = req.body;
+//   try {
+//     console.log(user_id);
+//     // console.log(amount);
+//     let final_amount;
+//     let bonus_amount;
+//     let flyer;
+
+//     if (bonus_flyer_id) {
+//       const qrBonusFlyer = await pool.query(
+//         "SELECT * FROM qr_bonus_flyer WHERE qr_bonus_flyer_id=$1",
+//         [bonus_flyer_id]
+//       );
+//       if (qrBonusFlyer.rows.length > 0) {
+//         console.log(qrBonusFlyer.rows[0]);
+//         flyer = qrBonusFlyer.rows[0];
+//         // offer_amount = qrBonusFlyer.rows[0].offer_amount;
+//         // Calculate total amount
+//         const bonus_coins = parseFloat(flyer.bonus_coins);
+//         const offer_percentage = parseFloat(flyer.offer_percentage);
+//         bonus_amount = bonus_coins + bonus_coins * (offer_percentage / 100);
+//         console.log("bonus_amount", bonus_amount);
+//       }
+//     }
+//     if (bonus_flyer_id) {
+//       final_amount = bonus_amount;
+//       // + amount;
+//     } else {
+//       final_amount = amount;
+//     }
+//     console.log("final_amount", final_amount);
+//     const userDataCheck = await pool.query(
+//       "SELECT * FROM users WHERE user_id=$1",
+//       [user_id]
+//     );
+
+//     if (userDataCheck.rows.length === 0) {
+//       res.json({ error: true, data: [], message: "User Not Found" });
+//     } else {
+//       console.log("hellonb");
+//       // add winning_amount_single to user wallet
+//       let userWallet;
+
+//       if (bonus_flyer_id) {
+//         userWallet = await pool.query(
+//           "SELECT * FROM wallet WHERE user_id=$1 AND type=$2",
+//           [user_id, "bonus"]
+//         );
+//       } else {
+//         userWallet = await pool.query(
+//           "SELECT * FROM wallet WHERE user_id=$1 AND type=$2",
+//           [user_id, "withdrawl"]
+//         );
+//       }
+//       console.log(userWallet.rows);
+//       if (userWallet.rows.length > 0) {
+//         let wallet;
+
+//         if (bonus_flyer_id) {
+//           wallet = await pool.query(
+//             "UPDATE wallet SET balance=$1 WHERE user_id=$2 AND type=$3  RETURNING *",
+//             [
+//               parseFloat(userWallet?.rows[0]?.balance) +
+//                 parseFloat(final_amount),
+//               user_id,
+//               "bonus",
+//             ]
+//           );
+//         } else {
+//           wallet = await pool.query(
+//             "UPDATE wallet SET balance=$1 WHERE user_id=$2 AND type=$3  RETURNING *",
+//             [
+//               parseFloat(userWallet?.rows[0]?.balance) +
+//                 parseFloat(final_amount),
+//               user_id,
+//               "withdrawl",
+//             ]
+//           );
+//         }
+//         console.log(wallet);
+//         if (wallet.rows.length > 0) {
+//           let type;
+//           if (bonus_flyer_id) {
+//             type = "deposit";
+//           } else {
+//             type = "withdrawl";
+//           }
+//           const userDataTransaction = await pool.query(
+//             "INSERT INTO transaction_history(user_id,amount,type, money_type,money_type_details ) VALUES($1,$2,$3,$4,$5) returning *",
+//             [user_id, final_amount, type, payment_type, JSON.stringify(flyer)]
+//           );
+//           console.log(userDataTransaction);
+
+//           if (userDataTransaction.rows.length > 0) {
+//             console.log("wallet updated");
+//             res.json({
+//               error: false,
+//               wallet: wallet.rows[0],
+//               message: "Amount Added to Wallet Successfully",
+//             });
+//           } else {
+//             res.json({
+//               error: true,
+//               data: [],
+//               message: "Can't Update Transaction History",
+//             });
+//           }
+//         } else {
+//           // console.log("error", error);
+//           res.json({ error: true, data: [], message: "Something went wrong" });
+//         }
+//       }
+//     }
+//   } catch (error) {
+//     console.log("error", error);
+//   }
+// });
 app.post("/create_payment_paypal-db-wallet", async (req, res) => {
   const { user_id, amount, bonus_flyer_id, payment_type } = req.body;
+
   try {
-    console.log(user_id);
-    // console.log(amount);
-    let final_amount;
-    let bonus_amount;
-    let flyer;
+    console.log("User ID:", user_id);
+
+    let final_amount = amount; // Default to user-entered amount
+    let flyer = null;
 
     if (bonus_flyer_id) {
       const qrBonusFlyer = await pool.query(
         "SELECT * FROM qr_bonus_flyer WHERE qr_bonus_flyer_id=$1",
         [bonus_flyer_id]
       );
+
       if (qrBonusFlyer.rows.length > 0) {
-        console.log(qrBonusFlyer.rows[0]);
         flyer = qrBonusFlyer.rows[0];
-        // offer_amount = qrBonusFlyer.rows[0].offer_amount;
-        // Calculate total amount
-        const bonus_coins = parseFloat(flyer.bonus_coins);
-        const offer_percentage = parseFloat(flyer.offer_percentage);
-        bonus_amount = bonus_coins + bonus_coins * (offer_percentage / 100);
-        console.log("bonus_amount", bonus_amount);
+
+        const bonus_coins = parseFloat(flyer.bonus_coins || 0);
+        const offer_percentage = parseFloat(flyer.offer_percentage || 0);
+        const bonus_amount =
+          bonus_coins + (bonus_coins * offer_percentage) / 100;
+
+        console.log("Bonus Amount:", bonus_amount);
+        final_amount = bonus_amount; // Override with bonus amount
       }
     }
-    if (bonus_flyer_id) {
-      final_amount = bonus_amount;
-      // + amount;
-    } else {
-      final_amount = amount;
-    }
-    console.log("final_amount", final_amount);
+
+    console.log("Final Amount:", final_amount);
+
+    // Check if the user exists
     const userDataCheck = await pool.query(
       "SELECT * FROM users WHERE user_id=$1",
       [user_id]
     );
 
     if (userDataCheck.rows.length === 0) {
-      res.json({ error: true, data: [], message: "User Not Found" });
+      return res.json({ error: true, data: [], message: "User Not Found" });
+    }
+
+    console.log("User Found, proceeding...");
+
+    // Determine wallet type (bonus or withdrawl)
+    const walletType = bonus_flyer_id ? "bonus" : "withdrawl";
+
+    // Check if the user has a wallet of the specified type
+    let userWallet = await pool.query(
+      "SELECT * FROM wallet WHERE user_id=$1 AND type=$2",
+      [user_id, walletType]
+    );
+
+    let wallet;
+
+    if (userWallet.rows.length === 0) {
+      // **Create a new wallet if it doesn't exist**
+      console.log("No wallet found, creating new one...");
+      wallet = await pool.query(
+        "INSERT INTO wallet (user_id, balance, type) VALUES ($1, $2, $3) RETURNING *",
+        [user_id, final_amount, walletType]
+      );
     } else {
-      console.log("hellonb");
-      // add winning_amount_single to user wallet
-      let userWallet;
+      // **Update existing wallet balance**
+      console.log("Wallet found, updating balance...");
+      wallet = await pool.query(
+        "UPDATE wallet SET balance=$1, updated_at=NOW() WHERE user_id=$2 AND type=$3 RETURNING *",
+        [
+          parseFloat(userWallet.rows[0].balance) + parseFloat(final_amount),
+          user_id,
+          walletType,
+        ]
+      );
+    }
 
-      if (bonus_flyer_id) {
-        userWallet = await pool.query(
-          "SELECT * FROM wallet WHERE user_id=$1 AND type=$2",
-          [user_id, "bonus"]
-        );
+    console.log("Updated Wallet:", wallet.rows[0]);
+
+    if (wallet.rows.length > 0) {
+      // Determine transaction type (deposit for bonus, withdrawl otherwise)
+      const transactionType = bonus_flyer_id ? "deposit" : "withdrawl";
+
+      // Insert transaction history
+      const userDataTransaction = await pool.query(
+        "INSERT INTO transaction_history(user_id, amount, type, money_type, money_type_details) VALUES($1, $2, $3, $4, $5) RETURNING *",
+        [
+          user_id,
+          final_amount,
+          transactionType,
+          payment_type,
+          JSON.stringify(flyer),
+        ]
+      );
+
+      if (userDataTransaction.rows.length > 0) {
+        console.log("Transaction recorded successfully.");
+        return res.json({
+          error: false,
+          wallet: wallet.rows[0],
+          message: "Amount Added to Wallet Successfully",
+        });
       } else {
-        userWallet = await pool.query(
-          "SELECT * FROM wallet WHERE user_id=$1 AND type=$2",
-          [user_id, "withdrawl"]
-        );
+        return res.json({
+          error: true,
+          data: [],
+          message: "Can't Update Transaction History",
+        });
       }
-      console.log(userWallet.rows);
-      if (userWallet.rows.length > 0) {
-        let wallet;
-
-        if (bonus_flyer_id) {
-          wallet = await pool.query(
-            "UPDATE wallet SET balance=$1 WHERE user_id=$2 AND type=$3  RETURNING *",
-            [
-              parseFloat(userWallet?.rows[0]?.balance) +
-                parseFloat(final_amount),
-              user_id,
-              "bonus",
-            ]
-          );
-        } else {
-          wallet = await pool.query(
-            "UPDATE wallet SET balance=$1 WHERE user_id=$2 AND type=$3  RETURNING *",
-            [
-              parseFloat(userWallet?.rows[0]?.balance) +
-                parseFloat(final_amount),
-              user_id,
-              "withdrawl",
-            ]
-          );
-        }
-        console.log(wallet);
-        if (wallet.rows.length > 0) {
-          const type = "withdrawl";
-          const userDataTransaction = await pool.query(
-            "INSERT INTO transaction_history(user_id,amount,type, money_type,money_type_details ) VALUES($1,$2,$3,$4,$5) returning *",
-            [user_id, final_amount, type, payment_type, JSON.stringify(flyer)]
-          );
-          console.log(userDataTransaction);
-
-          if (userDataTransaction.rows.length > 0) {
-            console.log("wallet updated");
-            res.json({
-              error: false,
-              wallet: wallet.rows[0],
-              message: "Amount Added to Wallet Successfully",
-            });
-          } else {
-            res.json({
-              error: true,
-              data: [],
-              message: "Can't Update Transaction History",
-            });
-          }
-        } else {
-          // console.log("error", error);
-          res.json({ error: true, data: [], message: "Something went wrong" });
-        }
-      }
+    } else {
+      return res.json({
+        error: true,
+        data: [],
+        message: "Something went wrong while updating wallet",
+      });
     }
   } catch (error) {
-    console.log("error", error);
+    console.error("Error:", error);
+    return res
+      .status(500)
+      .json({ error: true, message: "Internal Server Error" });
   }
 });
+
 // payout check
 app.post("/payout-check", async (req, res) => {
   const { payoutBatchId } = req.body;
@@ -2228,7 +2353,7 @@ app.post("/send-notification", async (req, res) => {
     const body = `You have a new service request from .`;
     const type = "SERVICES";
     const data = {
-      user_id: "123",
+      userId: "100054",
       type,
     };
     await sendNotification(token, title, body, data, type);
